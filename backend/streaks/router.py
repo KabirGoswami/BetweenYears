@@ -25,3 +25,16 @@ async def values_test_complete(user=Depends(get_current_user)):
     """Award Values Explorer badge when user completes the values test."""
     await svc.award_values_badge(user["id"])
     return {"message": "Values badge awarded!", "badge": "values_explorer"}
+
+
+@router.post("/dev-reset", status_code=200)
+async def dev_reset_progress(user=Depends(get_current_user)):
+    """(DEV) Reset all gamification progress."""
+    return await svc.dev_reset_progress(user["id"])
+
+
+@router.post("/dev-increment", status_code=200)
+async def dev_increment_streak(user=Depends(get_current_user)):
+    """(DEV) Increment streak by 1."""
+    return await svc.dev_increment_streak(user["id"])
+

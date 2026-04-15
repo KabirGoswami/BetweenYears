@@ -260,3 +260,73 @@ async def award_values_badge(user_id: str):
         }).execute()
     except Exception:
         pass
+
+
+async def dev_reset_progress(user_id: str):
+    """Dev tool: Reset user streaks, XP, and badges to 0."""
+    admin = get_admin_client()
+    try:
+        admin.table("xp_events").delete().eq("user_id", user_id).execute()
+        admin.table("user_badges").delete().eq("user_id", user_id).execute()
+        
+        reset_data = {
+            "current_streak": 0,
+            "longest_streak": 0,
+            "total_entries": 0,
+            "total_xp": 0,
+            "level": "Beginner",
+            "last_entry_date": None,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Upsert in case streak record doesn't exist yet
+        try:
+            admin.table("streaks").update(reset_data).eq("user_id", user_id).execute()
+        except Exception:
+            # If update fails, insert it
+            reset_data["user_id"] = user_id
+            admin.table("streaks").insert(reset_data).execute()
+
+        return {"status": "success", "message": "Gamification progress reset to 0"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def dev_increment_streak(user_id: str):
+    """Dev tool: Increment current streak by 1 and update longest streak."""
+    admin = get_admin_client()
+    try:
+        try:
+            streak_res = admin.table("streaks").select("*").eq("user_id", user_id).single().execute()
+            streak = streak_res.data or {}
+        except Exception:
+            streak = {}
+
+        current_streak = streak.get("current_streak", 0) + 1
+        longest_streak = max(streak.get("longest_streak", 0), current_streak)
+        
+        upsert_data = {
+            "user_id": user_id,
+            "current_streak": current_streak,
+            "longest_streak": longest_streak,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Don't overwrite other fields if inserting
+        if not streak:
+            upsert_data.update({
+                "total_entries": 0,
+                "total_xp": 0,
+                "level": "Beginner"
+            })
+            admin.table("streaks").insert(upsert_data).execute()
+        else:
+            admin.table("streaks").update({
+                "current_streak": current_streak,
+                "longest_streak": longest_streak,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }).eq("user_id", user_id).execute()
+
+        return {"status": "success", "message": f"Streak incremented to {current_streak}", "new_streak": current_streak}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

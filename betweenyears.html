@@ -1805,6 +1805,12 @@ function getReflectionDates() {
 }
 
 function computeStreak(dates) {
+  const devOverride = localStorage.getItem('by_dev_streak');
+  if (devOverride) {
+    const val = parseInt(devOverride, 10);
+    return { current: val, best: val };
+  }
+  
   if (!dates.length) return { current: 0, best: 0 };
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -1848,6 +1854,17 @@ function renderStreakDots() {
   const dateSet = new Set(dates);
   const today = new Date();
   today.setHours(0,0,0,0);
+
+  const devOverride = localStorage.getItem('by_dev_streak');
+  if (devOverride) {
+    const val = parseInt(devOverride, 10);
+    for (let i = 0; i < val; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        dateSet.add(d.toISOString().slice(0,10));
+    }
+  }
+
   const DAYS = 14;
   container.innerHTML = '';
   const DAY_NAMES = ['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -2524,5 +2541,92 @@ body.has-guest-banner #luna-panel { bottom: 8.5rem; }
 
 })();
 </script>
-</body>
-</html>
+
+<!-- DEV MENU -->
+<div id="dev-menu" style="position: fixed; bottom: 20px; left: 20px; z-index: 10000; background: rgba(0,0,0,0.8); color: white; padding: 12px; border-radius: 8px; font-family: sans-serif; font-size: 13px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+  <strong style="margin-bottom: 2px; opacity: 0.8; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">Dev Menu</strong>
+  <button onclick="devResetProgress()" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: background 0.2s;" onmouseover="this.style.background='#c82333'" onmouseout="this.style.background='#dc3545'">Reset All Progress</button>
+  <button onclick="devIncrementStreak()" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: background 0.2s;" onmouseover="this.style.background='#218838'" onmouseout="this.style.background='#28a745'">Increment Streak</button>
+</div>
+<script>
+  const DEV_API_URL = 'http://localhost:8000';
+  
+  async function devResetProgress() {
+    if(!confirm("Are you sure you want to reset all gamification progress to 0?")) return;
+    const token = localStorage.getItem('by_access_token');
+    const isGuest = localStorage.getItem('by_guest_mode') === 'true';
+    if (!token && !isGuest) return alert('Not logged in.');
+    
+    if (isGuest) {
+      localStorage.removeItem('by_stats');
+      localStorage.removeItem('by_badges');
+      localStorage.removeItem('by_dev_streak');
+      alert('Guest progress reset.');
+      location.reload();
+      return;
+    }
+
+    try {
+      const res = await fetch(`${DEV_API_URL}/streaks/dev-reset`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await res.json();
+      if(res.ok) {
+        alert(data.message || 'Progress reset.');
+        location.reload();
+      } else {
+        alert("Error resetting progress: " + (data.detail || 'Unknown error'));
+      }
+    } catch(err) {
+      alert("Network error: " + err.message);
+    }
+  }
+
+  async function devIncrementStreak() {
+    const token = localStorage.getItem('by_access_token');
+    const isGuest = localStorage.getItem('by_guest_mode') === 'true';
+    if (!token && !isGuest) return alert('Not logged in.');
+
+    if (isGuest) {
+      let currentVal = parseInt(localStorage.getItem('by_dev_streak') || 0, 10);
+      currentVal++;
+      localStorage.setItem('by_dev_streak', currentVal.toString());
+      
+      let stats = { streak: 0, longest_streak: 0, xp: 0, level: 'Beginner' };
+      try { stats = JSON.parse(localStorage.getItem('by_stats')); } catch(e) {}
+      if (!stats) stats = { streak: 0, longest_streak: 0, xp: 0, level: 'Beginner' };
+      stats.streak = currentVal;
+      stats.longest_streak = Math.max((stats.longest_streak || 0), currentVal);
+      localStorage.setItem('by_stats', JSON.stringify(stats));
+      
+      alert('Guest streak incremented to ' + currentVal);
+      location.reload();
+      return;
+    }
+
+    try {
+      const res = await fetch(`${DEV_API_URL}/streaks/dev-increment`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await res.json();
+      if(res.ok) {
+        alert(data.message || 'Streak incremented.');
+        location.reload();
+      } else {
+        alert("Error incrementing streak: " + (data.detail || 'Unknown error'));
+      }
+    } catch(err) {
+      alert("Network error: " + err.message);
+    }
+  }
+</script>
+<!-- /DEV MENU -->
+
